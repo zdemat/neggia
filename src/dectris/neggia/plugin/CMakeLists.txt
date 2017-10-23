@@ -27,7 +27,7 @@ set (SOURCES
 )
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_library(dectris-neggia SHARED ${SOURCES})
-target_link_libraries(dectris-neggia neggia_static)
+target_link_libraries(dectris-neggia neggia_static general rt general pthread general boost_system general boost_thread)
 set_target_properties(dectris-neggia PROPERTIES PREFIX "" SUFFIX ".so")
 install(TARGETS dectris-neggia LIBRARY DESTINATION lib)
 set(DECTRIS_NEGGIA_XDS_PLUGIN ${CMAKE_CURRENT_BINARY_DIR}/dectris-neggia.so CACHE INTERNAL "")
