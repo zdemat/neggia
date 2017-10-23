@@ -32,6 +32,9 @@ SOFTWARE.
 #include <memory>
 #include <string>
 #include <vector>
+#include <utility>
+
+#include "Synchronization.h"
 
 class H5LinkMsg;
 class H5LinkInfoMsg;
@@ -87,7 +90,11 @@ private:
    int _dataTypeId;
    bool _isSigned;
 
-
+   std::string _path;
+   bool _syncLockEnabled;
+   Synchronization::SharedSegment _syncShm;
+   Synchronization::Shared::shared_ptr<Synchronization::Shared::NeggiaDsetSyncObj> _ptrSyncObj;
+   Synchronization::atomic_lock* _ptrSyncMtx;
 
 };
 

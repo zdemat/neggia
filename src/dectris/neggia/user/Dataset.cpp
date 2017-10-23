@@ -40,12 +40,16 @@ SOFTWARE.
 #include <assert.h>
 #include <string.h>
 
+#include <boost/interprocess/sync/scoped_lock.hpp>
+
 
 Dataset::Dataset():
     _filterId(-1),
     _dataSize(0),
     _dataTypeId(-1),
-    _isSigned(false)
+    _isSigned(false),
+    _path(""),
+    _syncLockEnabled(false)
 {}
 
 Dataset::Dataset(const H5File &h5File, const std::string &path):
@@ -53,15 +57,22 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
     _filterId(-1),
     _dataSize(0),
     _dataTypeId(-1),
-    _isSigned(false)
+    _isSigned(false),
+    _path(path),
+    _syncLockEnabled(true),
+    _syncShm(Synchronization::neggia_shm_id)
 {
     H5SymbolTableEntry root = H5Superblock(_h5File.fileAddress()).rootGroupSymbolTableEntry();
     resolvePath(root, path);
     parseDataSymbolTable();
+    _ptrSyncObj = Synchronization::Factory::find_or_create_dset(_syncShm, _h5File.path(), _path);
+    _ptrSyncMtx = &(_ptrSyncObj.get()->ptr->mtx);
 }
 
 Dataset::~Dataset()
-{}
+{
+    _ptrSyncMtx = 0;
+}
 
 unsigned int Dataset::dataTypeId() const
 {
@@ -96,12 +107,41 @@ std::vector<size_t> Dataset::chunkSize() const
 void Dataset::readRawData(ConstDataPointer rawData, void *outData, size_t outDataSize) const
 {
     assert(outDataSize == rawData.size);
-    memcpy(outData, rawData.data, outDataSize);
+    if(_syncLockEnabled) {
+      try {
+	pthread_spin_lock(_ptrSyncMtx);
+	memcpy(outData, rawData.data, outDataSize);
+	pthread_spin_unlock(_ptrSyncMtx);
+      }
+      catch (...) {
+	pthread_spin_unlock(_ptrSyncMtx);
+	throw;
+      }
+    } else
+      memcpy(outData, rawData.data, outDataSize);
 }
 
 void Dataset::readLz4Data(Dataset::ConstDataPointer rawData, void *data, size_t s) const
 {
-    lz4Decode(rawData.data,(char*)data,s);
+    if(_syncLockEnabled) {
+      // read raw data
+      void * raw_data = NULL;
+      posix_memalign(&raw_data, sizeof(void*), rawData.size);
+      try {
+	pthread_spin_lock(_ptrSyncMtx);
+	memcpy(raw_data, rawData.data, rawData.size);
+	pthread_spin_unlock(_ptrSyncMtx);
+      }
+      catch (...) {
+	pthread_spin_unlock(_ptrSyncMtx);
+	throw;
+      }
+      // decompress data
+      lz4Decode((char*)raw_data,(char*)data,s);
+      // cleanup
+      free((void*) raw_data);
+    } else 
+      lz4Decode(rawData.data,(char*)data,s);
 }
 
 void Dataset::readBitshuffleData(ConstDataPointer rawData, void *data, size_t s) const
@@ -109,7 +149,26 @@ void Dataset::readBitshuffleData(ConstDataPointer rawData, void *data, size_t s)
     assert (_filterCdValues.size() > 4);
     assert (_filterCdValues[4] == BSHUF_H5_COMPRESS_LZ4);
     int elementSize = _filterCdValues[2];
-    bshufUncompressLz4(rawData.data,(char*)data,s,elementSize);
+    
+    if(_syncLockEnabled) {
+      // read raw data
+      void * raw_data = NULL;
+      posix_memalign(&raw_data, sizeof(void*), rawData.size);
+      try {
+	pthread_spin_lock(_ptrSyncMtx);
+	memcpy(raw_data, rawData.data, rawData.size);
+	pthread_spin_unlock(_ptrSyncMtx);
+      }
+      catch (...) {
+	pthread_spin_unlock(_ptrSyncMtx);
+	throw;
+      }
+      // decompress data
+      bshufUncompressLz4(rawData.data,(char*)data,s,elementSize);
+      // cleanup
+      free((void*) raw_data);
+    } else
+      bshufUncompressLz4(rawData.data,(char*)data,s,elementSize);
 }
 
 size_t Dataset::getSizeOfOutData() const
