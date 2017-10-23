@@ -20,6 +20,6 @@
 #  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #  SOFTWARE.
 
-set(SOURCES "H5File.cpp" "Dataset.cpp")
+set(SOURCES "H5File.cpp" "Dataset.cpp" "Synchronization.h" "Synchronization.cpp" "neggia_sync_util.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_library(NEGGIA_USER OBJECT ${SOURCES})
