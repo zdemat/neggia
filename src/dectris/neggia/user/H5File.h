@@ -37,10 +37,12 @@ public:
    ~H5File();
    const char * fileAddress() const;
    std::string fileDir() const;
+   std::string path() const;
 
 private:
    std::shared_ptr<char> _fileAddress;
    std::string _fileDir;
+   std::string _path;
 };
 
 #endif // H5FILE_H

@@ -67,7 +67,7 @@ std::shared_ptr<char> mapFile(const std::string & fileName)
 
 
 H5File::H5File(const std::string &path):
-    _fileAddress(mapFile(path))
+    _fileAddress(mapFile(path)), _path(path)
 {
     for(ssize_t i=path.size()-1; i>0; i--) {
         if(path[i] == '/') {
@@ -92,4 +92,9 @@ const char *H5File::fileAddress() const
 std::string H5File::fileDir() const
 {
     return _fileDir;
+}
+
+std::string H5File::path() const
+{
+    return _path;
 }
