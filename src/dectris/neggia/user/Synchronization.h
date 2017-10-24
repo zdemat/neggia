@@ -10,6 +10,31 @@
 #include <iostream>
 #include <boost/format.hpp>
 
+/* Faked std::put_time for GCC<5 */
+#if __GNUC__ < 5
+namespace std {
+template<typename _CharT>
+  struct _Put_time
+{
+  const std::tm* _tmb;
+  const _CharT* _fmt;
+};
+
+template<typename _CharT>
+inline _Put_time<_CharT>
+put_time(const std::tm* __tmb, const _CharT* __fmt)
+{ return { __tmb, __fmt }; }
+
+template<typename _CharT, typename _Traits>
+basic_ostream<_CharT, _Traits>&
+operator<<(basic_ostream<_CharT, _Traits>& __os, _Put_time<_CharT> __f)
+{
+  __os << "(obsolate compiler)";
+  return __os;
+}
+} // namespace std
+#endif
+
 namespace Utils {
   
 class put_now { // insert current date and time into the stream
