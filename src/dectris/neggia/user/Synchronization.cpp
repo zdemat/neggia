@@ -1,6 +1,5 @@
 #include <boost/format.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
-  
+
 #include "Synchronization.h"
 
 namespace Utils {
@@ -117,18 +116,26 @@ namespace Shared {
     name(name), mtx(bip::open_or_create, (std::string(name)+"_mutex").c_str())
   {
     //Lock
-    bip::scoped_lock<bip::named_mutex> lock(mtx);
+    bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
     //Sanitize TODO::
     //Create shared memory
-    smt = Shared::segment(bip::open_or_create, name, 65536);
-    //std::cout << Utils::put_now() << boost::format(" SharedSegment(%s): segment ready\n") % name;
+    try {
+      smt = Shared::segment(bip::open_or_create, name, 65536);
+      //std::cout << Utils::put_now() << boost::format(" SharedSegment(%s): segment ready\n") % name;
+    } 
+    catch (std::exception& e) {
+      std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when creating/opening shared memory segment." << std::endl;
+      std::cerr << e.what() << '\n';
+      throw(e);
+    }
   }
   
   SharedSegment::~SharedSegment()
   {
+    bool rm_mtx = false;
     try {
       //Lock
-      bip::scoped_lock<bip::named_mutex> lock(mtx);
+      bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
       //Clean selfrefering(unique) shared pointers
       RemoveUniqueSharedPointers();
       //Sanitize TODO::
@@ -136,17 +143,43 @@ namespace Shared {
       //Remove shared memory if empty
       if(smt.get_num_named_objects()==0 && smt.get_num_unique_objects()==0) {
         bip::shared_memory_object::remove(name.c_str());
+	rm_mtx = true;
         //std::cout << Utils::put_now() << boost::format(" ~SharedSegment(%s): segment removed\n") % name;
       }
     }
     catch (std::exception& e) {
+      std::cerr << "Synchronization::SharedSegment::~SharedSegment: Exception thrown when trying to cleanup/remove shared memory segment." << std::endl;
       std::cerr << e.what() << '\n';
     }
-    bip::named_mutex::remove((name+"_mutex").c_str());
+    if(rm_mtx)
+      bip::named_recursive_mutex::remove((name+"_mutex").c_str());
   }
   
+  template<typename T> void _SharedSegment_removeAllByName(Shared::segment &smt, const char* name, size_t len)
+  {
+      std::vector<std::string> list;
+      typedef Shared::segment::const_named_iterator const_named_it;
+      const_named_it named_beg = smt.named_begin();
+      const_named_it named_end = smt.named_end();
+      
+      for(; named_beg != named_end; ++named_beg) {
+        const Shared::segment::char_type *str = named_beg->name();
+        if( strncmp(str,name,len)==0 )
+          list.push_back(name);
+      }
+
+      for(auto it=list.begin(); it!=list.end(); ++it) {
+	auto ret = smt.find<T>(it->c_str());
+	if(ret.second>0 && ret.first->use_count()<=1)
+	  smt.destroy<T>(it->c_str());
+      }
+  }
+
   void SharedSegment::RemoveUniqueSharedPointers()
   {
+    //Lock
+    bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
+
     std::vector<std::string> list;
     const char* str; size_t num;
 
@@ -166,6 +199,7 @@ namespace Shared {
     };
 
     smt.atomic_func(_findAllByName);
+    //_findAllByName();
 
     for(auto it=list.begin(); it!=list.end(); ++it) {
       auto ret = smt.find<SyncObjPtr>(it->c_str());
@@ -173,17 +207,28 @@ namespace Shared {
         smt.destroy<SyncObjPtr>(it->c_str());
     }
 
+    /*auto _removeObjPtrsByName = [&]()
+      { _SharedSegment_removeAllByName<SyncObjPtr>(smt, "ptr_obj:", 8); };
+
+      smt.atomic_func(_removeObjPtrsByName);*/
+
     //'ptr_mtx:' pointers in shared memory
     list.clear();
     str = "ptr_mtx:"; num = 8;
        
     smt.atomic_func(_findAllByName);
+    //_findAllByName();
     
     for(auto it=list.begin(); it!=list.end(); ++it) {
       auto ret = smt.find<SyncMtxPtr>(it->c_str());
       if(ret.second>0 && ret.first->use_count()<=1)
         smt.destroy<SyncMtxPtr>(it->c_str());
     }
+    
+      /*auto _removeMtxPtrsByName = [&]()
+      { _SharedSegment_removeAllByName<SyncMtxPtr>(smt, "ptr_mtx:", 8); };
+
+      smt.atomic_func(_removeMtxPtrsByName);*/
   }
     
   Shared::shared_ptr<Shared::NeggiaDsetSyncObj> Factory::find_or_create_dset(
@@ -194,55 +239,110 @@ namespace Shared {
     Shared::segment & smt = shm.smt;
     
     //Lock
-    bip::scoped_lock<bip::named_mutex> lock(shm.mtx);
+    bip::scoped_lock<bip::named_recursive_mutex> lock(shm.mtx);
     
     //Cleanup
-    shm.RemoveUniqueSharedPointers();
-    
+    try {
+      shm.RemoveUniqueSharedPointers();
+    }
+    catch (...) {
+      std::cerr << "Synchronization::Factory::find_or_create_dset: Exception thrown when cleaning dummy shared pointers." << std::endl;
+      throw;
+    }
+
     //canonize filepath, dsetpath TODO
     //Dataset name
     const std::string dset_name = filepath+":"+dsetpath;
 
     //Try to find ptr_mtx
-    auto retm = smt.find<SyncMtxPtr>(("ptr_mtx:"+dset_name).c_str());
     SyncMtxPtr ptr;
-    
+
+    size_t ex_counter = 0;
+  ex_label:
+    std::pair<SyncMtxPtr *, std::size_t> retm;
+    try { 
+      retm = smt.find<SyncMtxPtr>(("ptr_mtx:"+dset_name).c_str());
+    }
+    catch (...) {
+      if (++ex_counter<10)
+	  goto ex_label;
+      std::cerr << "Synchronization::Factory::find_or_create: Exception thrown when trying to find ptr_mtx." << std::endl;
+      std::cerr << "Synchronization::Factory::find_or_create_dset:";
+      std::cerr << " pid@thread=" << boost::format("%ld@x%06x") % getpid() % pthread_self();
+      std::cerr << ", dset_name=" << dset_name.c_str() << "\n";
+      std::cerr << put_NegiaSyncObjShmInfo();
+      throw;
+    }
+
     if(retm.second>0) {
       ptr = *retm.first;
     } else {
       //Create mtx, ptr_mtx and save the in shared memory
-      auto ret = smt.find<SyncMtx>(("mtx:"+dset_name).c_str());
-      SyncMtx* p = (ret.second>0) ? ret.first : smt.construct<SyncMtx>(("mtx:"+dset_name).c_str())
-        (dset_name.c_str(),smt.get_allocator<Shared::alloc<char>>());
-      ptr = bip::make_managed_shared_ptr(p,smt);
-      ptr = *smt.construct<SyncMtxPtr>(("ptr_mtx:"+dset_name).c_str())(ptr);
-    }    
-    
+      try {
+	auto ret = smt.find<SyncMtx>(("mtx:"+dset_name).c_str());
+	SyncMtx* p = (ret.second>0) ? ret.first : smt.construct<SyncMtx>(("mtx:"+dset_name).c_str())
+	  (dset_name.c_str(),smt.get_allocator<Shared::alloc<char>>());
+	ptr = bip::make_managed_shared_ptr(p,smt);
+	ptr = *smt.construct<SyncMtxPtr>(("ptr_mtx:"+dset_name).c_str())(ptr);
+      }
+      catch (...) {
+	if (++ex_counter<10)
+	  goto ex_label;
+	std::cerr << "Synchronization::Factory::find_or_create_dset: Exception thrown when trying to find/create mtx." << std::endl;
+	std::cerr << "Synchronization::Factory::find_or_create_dset:";
+	std::cerr << " pid@thread=" << boost::format("%ld@x%06x") % getpid() % pthread_self();
+	std::cerr << ", dset_name=" << dset_name.c_str() << "\n";
+	std::cerr << put_NegiaSyncObjShmInfo();
+	throw;
+      }
+    }
+
     //PID and thread ID
     std::string id;
-    {
+    try {
       std::ostringstream os;
       os << boost::format("%ld@x%06x") % getpid() % pthread_self();
       id = os.str();
     }
+    catch (...) {
+      std::cerr << "Synchronization::Factory::find_or_create_dset: Exception thrown when creating obj id." << std::endl;
+      throw;
+    }
     
     //Find or construct shared NeggiaDsetSyncObj as owner of the mutex above
-    SyncObj* pobj = smt.find_or_construct<SyncObj>(("DsetSyncObj:"+id+":"+dset_name).c_str())
-      (dset_name.c_str(),ptr,smt.get_allocator<Shared::alloc<char>>());
- 
-    //Try to find ptr_obj:                                                                                                                                                          
-    auto reto = smt.find<SyncObjPtr>(("ptr_obj:"+id+":"+dset_name).c_str());
+    SyncObj* pobj;
+
+    try {
+      pobj = smt.find_or_construct<SyncObj>(("DsetSyncObj:"+id+":"+dset_name).c_str())
+	(dset_name.c_str(),ptr,smt.get_allocator<Shared::alloc<char>>());
+    }
+    catch (...) {
+      std::cerr << "Synchronization::Factory::find_or_create_dset: Exception thrown when trying to get NeggiaDsetSyncObj." << std::endl;
+      throw;
+    }
+
+    //Try to find ptr_obj
     SyncObjPtr spobj;
 
-    if(reto.second>0) {
-      spobj = *reto.first;
-    } else {
-      //Create SyncObj (as owner of the mutex above), ptr_obj and save the in shared memory                  
-      auto ret = smt.find<SyncObj>(("DsetSyncObj:"+id+":"+dset_name).c_str());
-      SyncObj* p = (ret.second>0) ? ret.first : smt.construct<SyncObj>(("DsetSyncObj:"+id+":"+dset_name).c_str())
-        (dset_name.c_str(),ptr,smt.get_allocator<Shared::alloc<char>>());
-      spobj = bip::make_managed_shared_ptr(p,smt);
-      spobj = *smt.construct<SyncObjPtr>(("ptr_obj:"+id+":"+dset_name).c_str())(spobj);
+    try {
+
+      auto reto = smt.find<SyncObjPtr>(("ptr_obj:"+id+":"+dset_name).c_str());
+
+      if(reto.second>0) {
+	spobj = *reto.first;
+      } else {
+	//Create SyncObj (as owner of the mutex above), ptr_obj and save the in shared memory                  
+	auto ret = smt.find<SyncObj>(("DsetSyncObj:"+id+":"+dset_name).c_str());
+	SyncObj* p = (ret.second>0) ? ret.first : smt.construct<SyncObj>(("DsetSyncObj:"+id+":"+dset_name).c_str())
+	  (dset_name.c_str(),ptr,smt.get_allocator<Shared::alloc<char>>());
+	spobj = bip::make_managed_shared_ptr(p,smt);
+	spobj = *smt.construct<SyncObjPtr>(("ptr_obj:"+id+":"+dset_name).c_str())(spobj);
+      }
+
+    }
+    catch (...) {
+      std::cerr << "Synchronization::Factory::find_or_create_dset: Exception thrown when trying to find ptr_obj." << std::endl;
+      throw;
     }
 
     return spobj;

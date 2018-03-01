@@ -3,12 +3,38 @@
 
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/sync/named_mutex.hpp>
+#include <boost/interprocess/sync/named_recursive_mutex.hpp>
 #include <boost/interprocess/smart_ptr/shared_ptr.hpp>
 #include <boost/interprocess/smart_ptr/weak_ptr.hpp>
 #include <boost/interprocess/containers/string.hpp>
 #include <string>
 #include <iostream>
 #include <boost/format.hpp>
+
+// ------------------------------------------------------------------------------------------------------------
+/* Install customized boost assertion msg including stacktrace */
+#if BOOST_VERSION >= 106500
+// BOOST_ENABLE_ASSERT_DEBUG_HANDLER is defined for the whole project
+#include <stdexcept>    // std::logic_error
+#include <iostream>     // std::cerr
+#include <boost/stacktrace.hpp>
+
+namespace boost {
+  inline void assertion_failed_msg(char const* expr, char const* msg, char const* function, char const* file, long line) {
+    std::cerr << "?????????" << ": "
+	      << file << ":" << line << ": "
+	      << function << ": Assertion `"
+	      << expr << "' failed.\n"
+	      << "Backtrace:\n" << boost::stacktrace::stacktrace() << '\n';
+    std::abort();
+  }
+
+  inline void assertion_failed(char const* expr, char const* function, char const* file, long line) {
+    ::boost::assertion_failed_msg(expr, 0 /*nullptr*/, function, file, line);
+  }
+} // namespace boost
+#endif /*  BOOST_VERSION >= 116500 */
+// ------------------------------------------------------------------------------------------------------------
 
 /* Faked std::put_time for GCC<5 */
 #if __GNUC__ < 5
@@ -33,7 +59,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, _Put_time<_CharT> __f)
   return __os;
 }
 } // namespace std
-#endif
+#endif /* __GNUC__ < 5 */
 
 namespace Utils {
   
@@ -157,7 +183,7 @@ protected:
 protected:
   std::string name;
   Shared::segment smt;
-  bip::named_mutex mtx;
+  bip::named_recursive_mutex mtx;
 };
 
 class Factory

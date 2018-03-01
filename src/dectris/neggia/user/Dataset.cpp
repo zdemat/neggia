@@ -41,7 +41,7 @@ SOFTWARE.
 #include <string.h>
 
 #include <boost/interprocess/sync/scoped_lock.hpp>
-
+#include <boost/exception/diagnostic_information.hpp>
 
 Dataset::Dataset():
     _filterId(-1),
@@ -65,8 +65,22 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
     H5SymbolTableEntry root = H5Superblock(_h5File.fileAddress()).rootGroupSymbolTableEntry();
     resolvePath(root, path);
     parseDataSymbolTable();
-    _ptrSyncObj = Synchronization::Factory::find_or_create_dset(_syncShm, _h5File.path(), _path);
-    _ptrSyncMtx = &(_ptrSyncObj.get()->ptr->mtx);
+    try {
+      _ptrSyncObj = Synchronization::Factory::find_or_create_dset(_syncShm, _h5File.path(), _path);
+    }
+    catch (...) {
+      std::cerr << "neggia::Dataset::Dataset_0: Unhandled exception!" << std::endl <<
+	boost::current_exception_diagnostic_information();
+      throw;
+    }
+    try {
+      _ptrSyncMtx = &(_ptrSyncObj.get()->ptr->mtx);
+    }
+    catch (...) {
+      std::cerr << "neggia::Dataset::Dataset_1: Unhandled exception!" << std::endl <<
+	boost::current_exception_diagnostic_information();
+      throw;
+    }
 }
 
 Dataset::~Dataset()
@@ -161,6 +175,8 @@ void Dataset::readBitshuffleData(ConstDataPointer rawData, void *data, size_t s)
       }
       catch (...) {
 	pthread_spin_unlock(_ptrSyncMtx);
+	std::cerr << "neggia::Dataset::readBitshuffleData: Unhandled exception!" << std::endl <<
+	  boost::current_exception_diagnostic_information();
 	throw;
       }
       // decompress data
