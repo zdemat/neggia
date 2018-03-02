@@ -82,20 +82,22 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
 	boost::current_exception_diagnostic_information();
       throw;
     }
-    // get full datast size
+    // get full dataset size
     try {
-      std::vector<size_t> chunkOffset(3,0);
-      chunkOffset[0] = 0;
-      Dataset::ConstDataPointer p0 = getRawData(chunkOffset);
-      chunkOffset[0] = _dim[0]-1;
-      Dataset::ConstDataPointer p1 = getRawData(chunkOffset);
-      _dsetSize = (p1.data - p0.data) + p1.size;
-      _dsetStart = p0.data;
+      if(_dim.size()>0) {
+	std::vector<size_t> chunkOffset(_dim.size(),0);
+	chunkOffset[0] = 0;
+	Dataset::ConstDataPointer p0 = getRawData(chunkOffset);
+	chunkOffset[0] = _dim[0]-1;
+	Dataset::ConstDataPointer p1 = getRawData(chunkOffset);
+	_dsetSize = (p1.data - p0.data) + p1.size;
+	_dsetStart = p0.data;
+      }
     }
     catch (...) {
       std::cerr << "neggia::Dataset::Dataset_2: Unhandled exception!" << std::endl;
       throw;
-    }                                                             
+    }
 }
 
 Dataset::Dataset(const Dataset &_)
