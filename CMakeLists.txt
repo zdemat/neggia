@@ -26,13 +26,20 @@ project(neggia)
 cmake_policy(SET CMP0005 NEW)
 cmake_policy(SET CMP0003 NEW)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -O3 -DBOOST_ENABLE_ASSERT_DEBUG_HANDLER")
+find_package( Boost REQUIRED )
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -O3")
+
+if( NOT( ${Boost_VERSION} VERSION_LESS "106500" ) )
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBOOST_ENABLE_ASSERT_DEBUG_HANDLER")
+endif()
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -g -O3")
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 enable_testing()
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(VERSION 1.0.1)
+set(VERSION 1.0.1-sync-0.1)
 add_definitions(-DVERSION=\"${VERSION}\")
 
 add_subdirectory(src)

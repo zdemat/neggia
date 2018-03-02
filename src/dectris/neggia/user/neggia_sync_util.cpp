@@ -34,23 +34,23 @@ int main (int argc, char* argv[])
   po::store(po::parse_command_line(argc, argv, desc), vm);
   po::notify(vm);
   
-  	if(vm.count("help")) {
+  if(vm.count("help")) {
     std::cout << boost::format("%s [options] [args]\n") % argv[0];
-	  std::cout << boost::format("Usage: %s -l\n") % argv[0];
+    std::cout << boost::format("Usage: %s -l\n") % argv[0];
     std::cout << boost::format("Copyright (c) 2017  MAX IV Laboratory, Lund University, distributed under the MIT License\n");
-  	  std::cout << desc << "\n";
-		return 0;
-	}
+    std::cout << desc << "\n";
+    return 0;
+  }
 
-  	if(vm.count("remove")) {
+  if(vm.count("remove")) {
     std::cout << "Removing Neggia-Synchronization shared memory and mutex\n" << std::flush;
-	  bip::shared_memory_object::remove(neggia_shm_id);
-    bip::named_mutex::remove((std::string(neggia_shm_id)+std::string("_mutex")).c_str());
-	}
+    bip::shared_memory_object::remove(neggia_shm_id);
+    bip::named_recursive_mutex::remove((std::string(neggia_shm_id)+std::string("_mutex")).c_str());
+  }
  
-  	if(vm.count("list")) {
+  if(vm.count("list")) {
     std::cout << Utils::put_now() << "\n" << put_NegiaSyncObjShmInfo();
-	}
+  }
 
   if(vm.count("add")) {
     std::cout << Utils::put_now() << boost::format(" Adding: %s\n") % path;
@@ -63,11 +63,12 @@ int main (int argc, char* argv[])
     }
     pshm.reset( new SharedSegment(neggia_shm_id) );
     ppobj.reset( new SyncObjPtr(Factory::find_or_create_dset(*pshm.get(), strs[0], strs[1])) );
-	}
+  }
    
   if(vm.count("sleep")) {
     std::cout << boost::format("Sleeping for %d seconds ...\n") % sleep_tm << std::flush;
     std::this_thread::sleep_for(std::chrono::seconds(sleep_tm));
-	}
+  }
+
   return 0;
 }

@@ -20,6 +20,30 @@
 #  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 #  SOFTWARE.
 
-set(SOURCES "H5File.cpp" "Dataset.cpp" "Synchronization.h" "Synchronization.cpp" "neggia_sync_util.cpp")
+set(SOURCES "H5File.cpp" "Dataset.cpp" "Synchronization.h" "Synchronization.cpp")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set(Boost_USE_MULTITHREADED      ON)
+
+find_package( Boost REQUIRED )
+
+if( ${Boost_VERSION} VERSION_LESS "106500" )
+    set(Boost_REQUIRED_COMPONENTS system thread program_options)
+    set(System_LIBRARIES pthread rt)
+else()
+    set(Boost_REQUIRED_COMPONENTS system thread program_options stacktrace_basic stacktrace_addr2line)
+    set(System_LIBRARIES pthread rt dl)
+endif()
+
+find_package( Boost REQUIRED COMPONENTS ${Boost_REQUIRED_COMPONENTS} )
+
+include_directories( ${Boost_INCLUDE_DIR} )
+
 add_library(NEGGIA_USER OBJECT ${SOURCES})
+add_executable( neggia_sync_util neggia_sync_util.cpp )
+add_executable( neggia_sync_test neggia_sync_test.cpp )
+
+target_link_libraries( neggia_sync_util LINK_PUBLIC neggia_static ${System_LIBRARIES} ${Boost_LIBRARIES} )
+target_link_libraries( neggia_sync_test LINK_PUBLIC neggia_static ${System_LIBRARIES} ${Boost_LIBRARIES} )
+
+install(TARGETS neggia_sync_util neggia_sync_test DESTINATION bin)

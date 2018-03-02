@@ -177,6 +177,7 @@ class SharedSegment
   friend class Factory;
 public:
   SharedSegment(const char* name=default_shm_id);
+  SharedSegment(const SharedSegment& );
   ~SharedSegment();
 protected:
   void RemoveUniqueSharedPointers();
@@ -192,6 +193,7 @@ public:
   static Shared::shared_ptr<Shared::NeggiaDsetSyncObj> find_or_create_dset(
             SharedSegment& shm,
             const std::string& filepath, const std::string& dsetpath);
+  static void destroy_ptr(SharedSegment& shm, Shared::shared_ptr<Shared::NeggiaDsetSyncObj>* ptr);
 };
 
 } // namespace Synchronization

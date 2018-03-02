@@ -129,7 +129,25 @@ namespace Shared {
       throw(e);
     }
   }
-  
+
+  SharedSegment::SharedSegment(const SharedSegment& _) :
+    name(_.name), mtx(bip::open_only, (_.name+"_mutex").c_str()) // (empty) implicit constructor may be not allowed
+  {
+      //Lock
+      bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
+      //Sanitize TODO::
+      //Create shared memory
+      try {
+        smt = Shared::segment(bip::open_only, name.c_str());
+        //std::cout << Utils::put_now() << boost::format(" SharedSegment(%s): segment ready\n") % name;
+      } 
+      catch (std::exception& e) {
+        std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when opening shared memory segment." << std::endl;
+        std::cerr << e.what() << '\n';
+        throw(e);
+      }
+  }
+   
   SharedSegment::~SharedSegment()
   {
     bool rm_mtx = false;
@@ -348,4 +366,25 @@ namespace Shared {
     return spobj;
   }
   
+  void Factory::destroy_ptr(SharedSegment& shm, Shared::shared_ptr<Shared::NeggiaDsetSyncObj>* ptr)
+  {
+    // shared memory segment
+    Shared::segment & smt = shm.smt;
+    
+    //Lock
+    bip::scoped_lock<bip::named_recursive_mutex> lock(shm.mtx);
+    
+    //Cleanup
+    try {
+      shm.RemoveUniqueSharedPointers();
+    }
+    catch (...) {
+      std::cerr << "Synchronization::Factory::find_or_create_dset: Exception thrown when cleaning dummy shared pointers." << std::endl;
+      throw;
+    }
+    
+    // destroy shared poiter
+    smt.destroy_ptr<SyncObjPtr>(ptr);
+  }
+       
 } // namespace Synchronization

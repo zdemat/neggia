@@ -62,6 +62,7 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
     _syncLockEnabled(true),
     _syncShm(Synchronization::neggia_shm_id)
 {
+  //std::cout<<"Dataset(const H5File &h5File, const std::string &path)"<<std::endl;
     H5SymbolTableEntry root = H5Superblock(_h5File.fileAddress()).rootGroupSymbolTableEntry();
     resolvePath(root, path);
     parseDataSymbolTable();
@@ -81,11 +82,41 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
 	boost::current_exception_diagnostic_information();
       throw;
     }
+    // get full datast size
+    try {
+      std::vector<size_t> chunkOffset(3,0);
+      chunkOffset[0] = 0;
+      Dataset::ConstDataPointer p0 = getRawData(chunkOffset);
+      chunkOffset[0] = _dim[0]-1;
+      Dataset::ConstDataPointer p1 = getRawData(chunkOffset);
+      _dsetSize = (p1.data - p0.data) + p1.size;
+      _dsetStart = p0.data;
+    }
+    catch (...) {
+      std::cerr << "neggia::Dataset::Dataset_2: Unhandled exception!" << std::endl;
+      throw;
+    }                                                             
+}
+
+Dataset::Dataset(const Dataset &_)
+{
+  //std::cout<<"Dataset(const Dataset &_)"<<std::endl;
+    Dataset(_._h5File, _._path);
 }
 
 Dataset::~Dataset()
 {
+  //std::cout<<"~Dataset()"<<std::endl;
     _ptrSyncMtx = 0;
+    try {
+      //Synchronization::Factory::destroy_ptr(_syncShm, &_ptrSyncObj);
+      ;
+    }
+    catch (...) {
+      std::cerr << "neggia::Dataset::~Dataset_0: Unhandled exception!" << std::endl <<
+	boost::current_exception_diagnostic_information();
+      throw;
+    }
 }
 
 unsigned int Dataset::dataTypeId() const

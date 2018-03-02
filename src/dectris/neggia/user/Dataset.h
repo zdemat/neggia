@@ -45,6 +45,7 @@ public:
    Dataset();
    Dataset(const H5File & h5File,
            const std::string & path);
+   Dataset(const Dataset & );
    ~Dataset();
 
    unsigned int dataTypeId() const;
@@ -90,11 +91,17 @@ private:
    int _dataTypeId;
    bool _isSigned;
 
+   size_t _dsetSize;
+   const char * _dsetStart;
+
    std::string _path;
    bool _syncLockEnabled;
    Synchronization::SharedSegment _syncShm;
    Synchronization::Shared::shared_ptr<Synchronization::Shared::NeggiaDsetSyncObj> _ptrSyncObj;
    Synchronization::atomic_lock* _ptrSyncMtx;
+
+   friend std::pair<const char*, size_t> DatasetGetRawDataPointer(const Dataset & dset, const std::vector<size_t> &chunkOffset);
+   friend void DatasetReadRawBitshuffleData(const Dataset & dset, const std::pair<const char*, size_t> p, void *data, size_t s);
 
 };
 
