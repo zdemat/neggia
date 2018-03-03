@@ -42,6 +42,7 @@ SOFTWARE.
 
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <boost/exception/diagnostic_information.hpp>
+#include <boost/algorithm/string.hpp>
 
 Dataset::Dataset():
     _filterId(-1),
@@ -66,6 +67,12 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
     H5SymbolTableEntry root = H5Superblock(_h5File.fileAddress()).rootGroupSymbolTableEntry();
     resolvePath(root, path);
     parseDataSymbolTable();
+    {
+      const char* env_var = std::getenv("NEGGIA_SYNC_DISABLE");
+      if( env_var && ((strlen(env_var)==1 && (*env_var=='1' || *env_var=='y' || *env_var=='Y')) ||
+		      (strlen(env_var)==3 && boost::iequals(env_var,"yes"))) )
+	_syncLockEnabled = false;
+    }
     try {
       _ptrSyncObj = Synchronization::Factory::find_or_create_dset(_syncShm, _h5File.path(), _path);
     }

@@ -21,6 +21,7 @@
 using namespace std;
 
 bool skipDecompression = false;
+bool g_syncLockEnabled = true;
 
 double _time_reading1(const Dataset & dset, unsigned int * img)
 { 
@@ -79,13 +80,15 @@ void DatasetReadRawBitshuffleData(const Dataset & dset, const std::pair<const ch
   //std::cout << rawData.size << "," << transf_sz << "," << ntransf << "," << dsetRelEnd << "\n";
 
   for(size_t i=0; i<ntransf; i++) {
-    pthread_spin_lock( &mtx );
+    if (g_syncLockEnabled)
+      pthread_spin_lock( &mtx );
     size_t transf_start = i*transf_sz;
     size_t transf_end = (sz<transf_sz) ? (transf_start+sz) : (transf_start+transf_sz);
     if (transf_end>dsetRelEnd) transf_end = dsetRelEnd;
     //std::cout << sz << ", " << transf_end-transf_start << "\n";
     memcpy((char*)raw_data+i*transf_sz, (char*)rawData.data+transf_start, transf_end-transf_start);
-    pthread_spin_unlock( &mtx );
+    if (g_syncLockEnabled)
+      pthread_spin_unlock( &mtx );
     sz -=  transf_end-transf_start;
   }
   //cout << rawData.size << "\n";
@@ -115,7 +118,7 @@ void openDatasetsAndBuildChunkIndexCache(vector< std::shared_ptr<Dataset> > & ds
                                          const vector< string > & dataset_names)
 {
   for(size_t i=0; i<dataset_names.size(); i++) {
-    std::shared_ptr<Dataset> pdset = std::make_shared<Dataset>( Dataset(*h5f_pointer, dataset_names[i]) );
+    std::shared_ptr<Dataset> pdset = std::make_shared<Dataset>(*h5f_pointer, dataset_names[i]);
     dsets.push_back( pdset );
     // build chunk index
     ChunkIndexCacheData & record = chunkIndexCache[dataset_names[i]];
@@ -295,7 +298,7 @@ double _time_reading2(vector<NeggiaReader> & h5readers, int ntasks, pthread_t ta
 }
 
 double _time_reading3(vector<NeggiaReader> & h5readers, int ntasks, pthread_t tasks[])
-{   
+{
   auto t1 = std::chrono::high_resolution_clock::now();
 
   for(size_t itask=0; itask<ntasks; itask++)
@@ -314,14 +317,22 @@ double _time_reading3(vector<NeggiaReader> & h5readers, int ntasks, pthread_t ta
 
 int main(int argc, char* argv[]) {
 
-	namespace po = boost::program_options;
-	po::options_description desc("Allowed options");
-	desc.add_options()
-  ("help", "describe arguments")
-	("doSingle", "Do single dataset reading test")
-	("skipCreateIndexCache", "Do not create internal HDF5 chunk index cache")
-  ("skipDecompression", "Just read raw data, do not uncompress them")
-  ("bypassMetaData", "Minimize access to datasets HDF5 metadata");
+  {
+    const char* env_var = std::getenv("NEGGIA_SYNC_DISABLE");
+    if( env_var && ((strlen(env_var)==1 && (*env_var=='1' || *env_var=='y' || *env_var=='Y')) ||
+		    (strlen(env_var)==3 && boost::iequals(env_var,"yes"))) )
+      g_syncLockEnabled = false;
+  }
+  
+  namespace po = boost::program_options;
+  po::options_description desc("Allowed options");
+  desc.add_options()
+    ("help", "describe arguments")
+    ("doSingle", "Do single dataset reading test")
+    ("skipCreateIndexCache", "Do not create internal HDF5 chunk index cache")
+    ("skipDecompression", "Just read raw data, do not uncompress them")
+    ("bypassMetaData", "Minimize access to datasets HDF5 metadata")
+    ("disableSync", "Disable synchronization mechanism (same as NEGGIA_SYNC_DISABLE=1");
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -361,6 +372,9 @@ int main(int argc, char* argv[]) {
 
 	if (vm.count("bypassMetaData"))
 		bypassMetaData = true;
+
+	if (vm.count("disableSync"))
+		g_syncLockEnabled = false;
 
 	if( !createIndexCache )
 		bypassMetaData = false;
@@ -473,6 +487,7 @@ int main(int argc, char* argv[]) {
   cout << " createIndexCache: " << createIndexCache << '\n';
   cout << "skipDecompression: " << skipDecompression << '\n';
   cout << "   bypassMetaData: " << skipDecompression << '\n';
+  cout << "      disableSync: " << !g_syncLockEnabled << '\n';
   
   // ----------------------------------------------------------------------------
   // build chunk offsets (chunk index) metadata cache
