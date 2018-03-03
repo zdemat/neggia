@@ -78,7 +78,12 @@ namespace Shared {
 
       for(; named_beg != named_end; ++named_beg) {
         const segment::char_type *oname = named_beg->name();
-        if( strncmp(oname,"mtx:",4)==0 ) {
+        if( strlen(oname)==7 && strncmp(oname,"version",7)==0 ) {
+          auto ret = smt.find<Shared::string>(oname);
+          if( ret.second!=0 ) {
+            os << " * " << "String(version:" << (*ret.first) << ")\n";
+          }
+        } else if( strncmp(oname,"mtx:",4)==0 ) {
           auto ret = smt.find<SyncMtx>(oname);
           if( ret.second!=0 ) {
             assert(oname=="mtx:"+ret.first->name);
@@ -112,8 +117,9 @@ namespace Shared {
     return os;
   }
   
-  SharedSegment::SharedSegment(const char* name) :
-    name(name), mtx(bip::open_or_create, (std::string(name)+"_mutex").c_str())
+  SharedSegment::SharedSegment(const char* name, const char* version) :
+    name(name), version(version),
+    mtx(bip::open_or_create, (std::string(name)+"_mutex").c_str())
   {
     //Lock
     bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
@@ -128,10 +134,36 @@ namespace Shared {
       std::cerr << e.what() << '\n';
       throw(e);
     }
+    //Save version string
+    std::pair<Shared::string* , std::size_t> d_version;
+    try { 
+      d_version = smt.find<Shared::string>("version");
+    }
+    catch (std::exception& e) {
+      std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when trying to find memory version string." << std::endl;
+      std::cerr << e.what() << '\n';
+      throw(e);
+    }
+    if(d_version.second>0) {
+      ptr_smt_version = d_version.first;
+      if(std::string(version).compare(d_version.first->c_str())!=0)
+	std::cerr << "Warning: Shared memory segment and library are not same version\n";
+    } else {
+      //Save version string
+      try {
+	ptr_smt_version = smt.construct<Shared::string>("version")(version, smt.get_segment_manager());
+      }
+      catch (std::exception& e) {
+	std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when saving version string." << std::endl;
+	std::cerr << e.what() << '\n';
+	throw(e);
+      }
+    }
   }
 
   SharedSegment::SharedSegment(const SharedSegment& _) :
-    name(_.name), mtx(bip::open_only, (_.name+"_mutex").c_str()) // (empty) implicit constructor may be not allowed
+    name(_.name), version(_.version),
+    mtx(bip::open_only, (_.name+"_mutex").c_str()) // (empty) implicit constructor may be not allowed
   {
       //Lock
       bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
@@ -146,6 +178,22 @@ namespace Shared {
         std::cerr << e.what() << '\n';
         throw(e);
       }
+      //get segment version string
+      std::pair<Shared::string* , std::size_t> d_version;
+      try { 
+	d_version = smt.find<Shared::string>("version");
+      }
+      catch (std::exception& e) {
+	std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when trying to find memory version string." << std::endl;
+	std::cerr << e.what() << '\n';
+	throw(e);
+      }
+      if(d_version.second>0) {
+	ptr_smt_version = d_version.first;
+	if(std::string(version).compare(d_version.first->c_str())!=0)
+	  std::cerr << "Warning: Shared memory segment and library are not same version\n";
+      } else
+	throw std::runtime_error("Synchronization::SharedSegment::SharedSegment: Could not find `version` string in shared memory segment.");
   }
    
   SharedSegment::~SharedSegment()
@@ -159,7 +207,8 @@ namespace Shared {
       //Sanitize TODO::
       
       //Remove shared memory if empty
-      if(smt.get_num_named_objects()==0 && smt.get_num_unique_objects()==0) {
+    if( (smt.get_num_unique_objects()==0 && smt.get_num_named_objects()==0) ||
+        (smt.get_num_unique_objects()==0 && smt.get_num_named_objects()==1 && smt.find<Shared::string>("version").second>0) ) {
         bip::shared_memory_object::remove(name.c_str());
 	rm_mtx = true;
         //std::cout << Utils::put_now() << boost::format(" ~SharedSegment(%s): segment removed\n") % name;

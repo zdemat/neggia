@@ -36,8 +36,9 @@ int main (int argc, char* argv[])
   
   if(vm.count("help")) {
     std::cout << boost::format("%s [options] [args]\n") % argv[0];
+    std::cout << boost::format("Version: %s\n") % VERSION;
     std::cout << boost::format("Usage: %s -l\n") % argv[0];
-    std::cout << boost::format("Copyright (c) 2017  MAX IV Laboratory, Lund University, distributed under the MIT License\n");
+    std::cout << boost::format("Copyright (c) 2017-2018 MAX IV Laboratory, Lund University, distributed under the MIT License\n");
     std::cout << desc << "\n";
     return 0;
   }

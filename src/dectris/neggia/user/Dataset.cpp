@@ -60,7 +60,7 @@ Dataset::Dataset(const H5File &h5File, const std::string &path):
     _isSigned(false),
     _path(path),
     _syncLockEnabled(true),
-    _syncShm(Synchronization::neggia_shm_id)
+    _syncShm(Synchronization::neggia_shm_id,VERSION)
 {
   //std::cout<<"Dataset(const H5File &h5File, const std::string &path)"<<std::endl;
     H5SymbolTableEntry root = H5Superblock(_h5File.fileAddress()).rootGroupSymbolTableEntry();

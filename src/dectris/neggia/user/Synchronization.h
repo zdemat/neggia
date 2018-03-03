@@ -176,15 +176,17 @@ class SharedSegment
 {
   friend class Factory;
 public:
-  SharedSegment(const char* name=default_shm_id);
+  SharedSegment(const char* name=default_shm_id, const char* version=VERSION);
   SharedSegment(const SharedSegment& );
   ~SharedSegment();
 protected:
   void RemoveUniqueSharedPointers();
 protected:
   std::string name;
+  std::string version;
   Shared::segment smt;
   bip::named_recursive_mutex mtx;
+  Shared::string* ptr_smt_version;
 };
 
 class Factory
