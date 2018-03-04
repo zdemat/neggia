@@ -130,8 +130,8 @@ namespace Shared {
       //std::cout << Utils::put_now() << boost::format(" SharedSegment(%s): segment ready\n") % name;
     } 
     catch (std::exception& e) {
-      std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when creating/opening shared memory segment." << std::endl;
-      std::cerr << e.what() << '\n';
+      std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when creating/opening shared memory segment.\n";
+      std::cerr << e.what() << std::endl;
       throw(e);
     }
     //Save version string
@@ -140,8 +140,8 @@ namespace Shared {
       d_version = smt.find<Shared::string>("version");
     }
     catch (std::exception& e) {
-      std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when trying to find memory version string." << std::endl;
-      std::cerr << e.what() << '\n';
+      std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when trying to find memory version string.\n";
+      std::cerr << e.what() << std::endl;
       throw(e);
     }
     if(d_version.second>0) {
@@ -151,11 +151,11 @@ namespace Shared {
     } else {
       //Save version string
       try {
-	ptr_smt_version = smt.construct<Shared::string>("version")(version, smt.get_segment_manager());
+	ptr_smt_version = smt.find_or_construct<Shared::string>("version")(version, smt.get_allocator<Shared::alloc<char>>());
       }
       catch (std::exception& e) {
-	std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when saving version string." << std::endl;
-	std::cerr << e.what() << '\n';
+	std::cerr << "Synchronization::SharedSegment::SharedSegment: Exception thrown when saving version string.\n";
+	std::cerr << e.what() << std::endl;
 	throw(e);
       }
     }
@@ -165,6 +165,7 @@ namespace Shared {
     name(_.name), version(_.version),
     mtx(bip::open_only, (_.name+"_mutex").c_str()) // (empty) implicit constructor may be not allowed
   {
+    throw std::logic_error("THIS CODE IS NOT CLEAN. Do not call this!");
       //Lock
       bip::scoped_lock<bip::named_recursive_mutex> lock(mtx);
       //Sanitize TODO::
@@ -207,8 +208,8 @@ namespace Shared {
       //Sanitize TODO::
       
       //Remove shared memory if empty
-    if( (smt.get_num_unique_objects()==0 && smt.get_num_named_objects()==0) ||
-        (smt.get_num_unique_objects()==0 && smt.get_num_named_objects()==1 && smt.find<Shared::string>("version").second>0) ) {
+      if( (smt.get_num_unique_objects()==0 && smt.get_num_named_objects()==0) ||
+	  (smt.get_num_unique_objects()==0 && smt.get_num_named_objects()==1 && smt.find<Shared::string>("version").second>0) ) {
         bip::shared_memory_object::remove(name.c_str());
 	rm_mtx = true;
         //std::cout << Utils::put_now() << boost::format(" ~SharedSegment(%s): segment removed\n") % name;
@@ -218,8 +219,8 @@ namespace Shared {
       std::cerr << "Synchronization::SharedSegment::~SharedSegment: Exception thrown when trying to cleanup/remove shared memory segment." << std::endl;
       std::cerr << e.what() << '\n';
     }
-    if(rm_mtx)
-      bip::named_recursive_mutex::remove((name+"_mutex").c_str());
+    //if(rm_mtx)
+    //  bip::named_recursive_mutex::remove((name+"_mutex").c_str());
   }
   
   template<typename T> void _SharedSegment_removeAllByName(Shared::segment &smt, const char* name, size_t len)
