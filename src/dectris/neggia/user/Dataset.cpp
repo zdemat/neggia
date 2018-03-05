@@ -220,7 +220,7 @@ void Dataset::readBitshuffleData(ConstDataPointer rawData, void *data, size_t s)
 	throw;
       }
       // decompress data
-      bshufUncompressLz4(rawData.data,(char*)data,s,elementSize);
+      bshufUncompressLz4((char*)raw_data,(char*)data,s,elementSize);
       // cleanup
       free((void*) raw_data);
     } else
