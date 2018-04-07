@@ -47,6 +47,9 @@ int main (int argc, char* argv[])
     std::cout << "Removing Neggia-Synchronization shared memory and mutex\n" << std::flush;
     bip::shared_memory_object::remove(neggia_shm_id);
     bip::named_recursive_mutex::remove((std::string(neggia_shm_id)+std::string("_mutex")).c_str());
+    // cleaning also mess from 0.1 version
+    bip::named_recursive_mutex::remove("neggia_synchronization_shm");
+    bip::named_recursive_mutex::remove("neggia_synchronization_shm_mutex");
   }
  
   if(vm.count("list")) {
