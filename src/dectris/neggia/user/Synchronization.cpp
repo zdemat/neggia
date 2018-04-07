@@ -2,6 +2,12 @@
 
 #include "Synchronization.h"
 
+// for uid
+#include <pwd.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdio.h>
+
 namespace Utils {
   std::ostream& operator<<(std::ostream& os, const put_now& obj)
   {
@@ -21,6 +27,23 @@ namespace Synchronization {
   using SyncMtx        = Shared::NeggiaDsetSyncMtx;
   using SyncMtxPtr     = Shared::shared_ptr<SyncMtx>;
   using SyncMtxWeakPtr = Shared::weak_ptr<SyncMtx>;
+
+namespace detail {
+  
+  _str_neggia_shm_id::_str_neggia_shm_id(): std::string("neggia_synchronization") {
+    // add "uid"
+    struct passwd *p;
+    uid_t  uid;
+    if ((p = getpwuid(uid = getuid())) != NULL) {
+      append("_");
+      append(p->pw_name);
+    } else
+      throw std::runtime_error("Synchronization::detail::_str_neggia_shm_id: Could not initialize shared segment name.");
+    // add "shm" suffix
+    append("_shm");
+  };
+  
+}
   
 namespace Shared {
   

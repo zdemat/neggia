@@ -72,7 +72,21 @@ public:
 
 namespace Synchronization {
 
-static const char* neggia_shm_id = "neggia_synchronization_shm";
+namespace detail {
+  
+  // internal library constructors
+  
+  class _str_neggia_shm_id : public std::string
+  {
+  public:
+    _str_neggia_shm_id();
+  };
+ 
+  static const _str_neggia_shm_id _neggia_shm_id;
+ 
+}
+
+static const char* neggia_shm_id = detail::_neggia_shm_id.c_str();
 static const char* default_shm_id = neggia_shm_id;
   
 using atomic_lock = pthread_spinlock_t;
