@@ -1,4 +1,5 @@
 #include <boost/format.hpp>
+#include <iomanip> // put_time
 
 #include "Synchronization.h"
 
